@@ -1,22 +1,36 @@
 @echo off
 cd /d "%~dp0"
 echo ============================================================
-echo   CrowdCast AI - One-Click Setup ^& Server Launcher
+echo   CrowdCast AI - Automatic Setup ^& Server Launcher
 echo ============================================================
 
-if not exist ".venv\Scripts\python.exe" (
-    echo [1/3] Creating Python virtual environment (.venv) for this laptop...
-    python -m venv .venv
-    if errorlevel 1 (
-        echo ERROR: Python is not installed or not in PATH on this laptop.
-        echo Please install Python 3.10+ from https://www.python.org/downloads/ and check "Add Python to PATH".
-        pause
-        exit /b 1
+REM Detect available Python command (python or py launcher)
+set PYTHON_CMD=
+python --version >nul 2>&1
+if not errorlevel 1 (
+    set PYTHON_CMD=python
+) else (
+    py -3 --version >nul 2>&1
+    if not errorlevel 1 (
+        set PYTHON_CMD=py -3
     )
+)
+
+if "%PYTHON_CMD%"=="" (
+    echo ERROR: Python is not installed or not added to PATH on this laptop.
+    echo Please install Python 3.10+ from https://www.python.org/downloads/
+    echo IMPORTANT: Check the box "Add Python to PATH" during installation!
+    pause
+    exit /b 1
+)
+
+if not exist ".venv\Scripts\python.exe" (
+    echo [1/3] Creating virtual environment (.venv) using %PYTHON_CMD%...
+    %PYTHON_CMD% -m venv .venv
     echo [2/3] Installing required packages from requirements.txt...
     ".venv\Scripts\python.exe" -m pip install --upgrade pip
     ".venv\Scripts\pip.exe" install -r requirements.txt
-    echo [3/3] Training ML model for this laptop's environment...
+    echo [3/3] Building ML model for this laptop...
     ".venv\Scripts\python.exe" ml\train_model.py
 )
 

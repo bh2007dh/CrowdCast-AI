@@ -2,7 +2,20 @@
 CrowdCast AI — Location-Aware Intelligent Crowd & Traffic Prediction System.
 Main Flask Application Server.
 """
+import importlib.util
 import os
+import subprocess
+import sys
+from pathlib import Path
+
+# Auto-bootstrap missing packages if a user runs `python app.py` directly on a new laptop
+_REQUIRED_MODULES = ["flask", "werkzeug", "requests", "sklearn", "pandas", "numpy", "joblib", "dotenv"]
+_missing = [m for m in _REQUIRED_MODULES if importlib.util.find_spec(m) is None]
+if _missing:
+    print(f"Installing missing dependencies ({', '.join(_missing)}) from requirements.txt...")
+    req_file = Path(__file__).resolve().parent / "requirements.txt"
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", str(req_file)])
+
 from datetime import datetime, timezone
 from flask import Flask, jsonify, render_template
 
