@@ -116,5 +116,6 @@ if __name__ == "__main__":
     port = int(os.getenv("PORT", Config.PORT))
     host = os.getenv("HOST", Config.HOST)
     print(f"Starting CrowdCast AI server at http://{host}:{port}")
-    app.run(host=host, port=port, debug=Config.DEBUG)
+    app.run(host=host, port=port, debug=Config.DEBUG, use_reloader=False)
+
 
