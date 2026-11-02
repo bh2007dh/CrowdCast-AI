@@ -118,21 +118,32 @@ if __name__ == "__main__":
     import webbrowser
 
     port = int(os.getenv("PORT", Config.PORT))
-    host = os.getenv("HOST", Config.HOST)
-    url = f"http://{host}:{port}"
+    host = os.getenv("HOST", "0.0.0.0")
+    local_url = f"http://127.0.0.1:{port}"
 
-    # Check if an earlier instance is already listening on the configured port
+    # Detect local LAN IP so another laptop on the same Wi-Fi can also connect
+    lan_ip = "127.0.0.1"
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))
+            lan_ip = s.getsockname()[0]
+    except Exception:
+        pass
+
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.settimeout(1.0)
-        if sock.connect_ex((host, port)) == 0:
-            print(f"Notice: CrowdCast AI is already running at {url}")
-            webbrowser.open(url)
+        if sock.connect_ex(("127.0.0.1", port)) == 0:
+            print(f"Notice: CrowdCast AI is already running at {local_url}")
+            webbrowser.open(local_url)
         else:
-            print(f"Starting CrowdCast AI server at {url}")
-            print("IMPORTANT: Keep this window open! Do NOT press Ctrl+C to copy the URL (Ctrl+C stops the server).")
-            print(f"Opening {url} in your default browser automatically...")
-            threading.Timer(1.2, lambda: webbrowser.open(url)).start()
+            print(f"Starting CrowdCast AI server...")
+            print(f"  -> Local Browser URL : {local_url}")
+            if lan_ip != "127.0.0.1":
+                print(f"  -> Network / Wi-Fi URL: http://{lan_ip}:{port}")
+            print("IMPORTANT: Keep this window open! Do NOT press Ctrl+C (Ctrl+C stops the server).")
+            threading.Timer(1.2, lambda: webbrowser.open(local_url)).start()
             app.run(host=host, port=port, debug=Config.DEBUG, use_reloader=False)
+
 
 
 

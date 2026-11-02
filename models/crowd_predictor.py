@@ -26,7 +26,12 @@ class CrowdPredictor:
     def _ensure_model_loaded(self) -> None:
         if not os.path.exists(Config.CROWD_MODEL_PATH):
             train_and_save_models()
-        self.bundle = joblib.load(Config.CROWD_MODEL_PATH)
+        try:
+            self.bundle = joblib.load(Config.CROWD_MODEL_PATH)
+        except Exception:
+            # Automatically retrain if cloned onto another laptop with a different Python/Scikit-Learn version
+            train_and_save_models()
+            self.bundle = joblib.load(Config.CROWD_MODEL_PATH)
 
     def reload_model(self) -> Dict[str, Any]:
         meta = train_and_save_models()
