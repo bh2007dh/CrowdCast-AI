@@ -113,9 +113,27 @@ def create_app(test_config: dict = None) -> Flask:
 app = create_app()
 
 if __name__ == "__main__":
+    import socket
+    import threading
+    import webbrowser
+
     port = int(os.getenv("PORT", Config.PORT))
     host = os.getenv("HOST", Config.HOST)
-    print(f"Starting CrowdCast AI server at http://{host}:{port}")
-    app.run(host=host, port=port, debug=Config.DEBUG, use_reloader=False)
+    url = f"http://{host}:{port}"
+
+    # Check if an earlier instance is already listening on the configured port
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.settimeout(1.0)
+        if sock.connect_ex((host, port)) == 0:
+            print(f"Notice: CrowdCast AI is already running at {url}")
+            webbrowser.open(url)
+        else:
+            print(f"Starting CrowdCast AI server at {url}")
+            print("IMPORTANT: Keep this window open! Do NOT press Ctrl+C to copy the URL (Ctrl+C stops the server).")
+            print(f"Opening {url} in your default browser automatically...")
+            threading.Timer(1.2, lambda: webbrowser.open(url)).start()
+            app.run(host=host, port=port, debug=Config.DEBUG, use_reloader=False)
+
+
 
 
