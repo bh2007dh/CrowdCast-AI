@@ -1,0 +1,271 @@
+{% extends "base.html" %}
+{% block title %}System Administration — CrowdCast AI{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Campus, Gate &amp; Dataset Administration</h1>
+    <p class="page-subtitle">
+      Authenticate with hashed administrator credentials to register campus locations, manage entry/exit gates, retrain the synthetic ML dataset, and inspect system telemetry.
+    </p>
+  </div>
+  <div>
+    <button type="button" id="admin-retrain-btn" class="btn btn-primary">
+      Retrain ML Model on Synthetic Dataset
+    </button>
+  </div>
+</div>
+
+<div id="admin-feedback-banner" class="notice-banner notice-info" style="display: none;">
+  <span id="admin-feedback-text"></span>
+</div>
+
+<div class="grid-3" style="margin-bottom: 1.25rem;">
+  <!-- 1. Administrator Login Card -->
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">1. Administrator Authentication</h2>
+      <span id="admin-auth-badge" class="data-badge badge-demo">Password Hashed</span>
+    </div>
+    <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+      Default demo credentials: <code>admin</code> / <code>crowdcast_admin_2026</code> (stored via PBKDF2/Scrypt password hash in SQLite).
+    </p>
+    <form id="admin-login-form">
+      <div class="form-group">
+        <label class="form-label" for="adm-user">Username</label>
+        <input type="text" id="adm-user" class="form-control" value="admin" required />
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="adm-pass">Password</label>
+        <input type="password" id="adm-pass" class="form-control" value="crowdcast_admin_2026" required />
+      </div>
+      <button type="submit" class="btn btn-primary" style="width: 100%;">Verify Admin Login</button>
+    </form>
+  </div>
+
+  <!-- 2. Register Campus Entry/Exit Gate -->
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">2. Register Campus Entry/Exit Gate</h2>
+      <span class="data-badge badge-real">Gate Allocation</span>
+    </div>
+    <form id="admin-gate-form">
+      <div class="form-group">
+        <label class="form-label" for="gate-campus">Campus Name</label>
+        <input type="text" id="gate-campus" class="form-control" value="Main University Campus" required />
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="gate-name">Gate Name</label>
+        <input type="text" id="gate-name" class="form-control" placeholder="e.g., Gate 5 - Research Park North" required />
+      </div>
+      <div class="grid-2" style="gap: 0.55rem;">
+        <div class="form-group">
+          <label class="form-label" for="gate-type">Gate Direction</label>
+          <select id="gate-type" class="form-select">
+            <option value="Entry/Exit">Entry/Exit</option>
+            <option value="Entry Only">Entry Only</option>
+            <option value="Exit Only">Exit Only</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="gate-cap">Max Capacity / Hr</label>
+          <input type="number" id="gate-cap" class="form-control" value="850" min="100" required />
+        </div>
+      </div>
+      <div class="grid-2" style="gap: 0.55rem;">
+        <div class="form-group">
+          <label class="form-label" for="gate-lat">Latitude</label>
+          <input type="number" step="any" id="gate-lat" class="form-control" value="13.0115" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="gate-lon">Longitude</label>
+          <input type="number" step="any" id="gate-lon" class="form-control" value="80.2368" required />
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="gate-road">Connected Road Name</label>
+        <input type="text" id="gate-road" class="form-control" value="Sardar Patel Arterial Road" required />
+      </div>
+      <button type="submit" class="btn btn-primary" style="width: 100%;">Register Campus Gate</button>
+    </form>
+  </div>
+
+  <!-- 3. Add New Campus Location -->
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">3. Add Campus Reference Location</h2>
+      <span class="data-badge badge-real">Campus Registry</span>
+    </div>
+    <form id="admin-campus-form">
+      <div class="form-group">
+        <label class="form-label" for="camp-label">Campus Name / Label</label>
+        <input type="text" id="camp-label" class="form-control" placeholder="e.g., MIT Chromepet Campus" required />
+      </div>
+      <div class="grid-2" style="gap: 0.55rem;">
+        <div class="form-group">
+          <label class="form-label" for="camp-city">City</label>
+          <input type="text" id="camp-city" class="form-control" value="Chennai" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="camp-locality">Locality</label>
+          <input type="text" id="camp-locality" class="form-control" placeholder="Chromepet" required />
+        </div>
+      </div>
+      <div class="grid-2" style="gap: 0.55rem;">
+        <div class="form-group">
+          <label class="form-label" for="camp-lat">Latitude</label>
+          <input type="number" step="any" id="camp-lat" class="form-control" value="12.9487" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="camp-lon">Longitude</label>
+          <input type="number" step="any" id="camp-lon" class="form-control" value="80.1397" required />
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="camp-addr">Full Address</label>
+        <input type="text" id="camp-addr" class="form-control" placeholder="GST Road, Chromepet, Chennai" required />
+      </div>
+      <button type="submit" class="btn btn-secondary" style="width: 100%;">Add Campus Location</button>
+    </form>
+  </div>
+</div>
+
+<!-- Registered Campus Gates Table -->
+<div class="card">
+  <div class="card-header">
+    <h2 class="card-title">Registered Campus Entry &amp; Exit Gates</h2>
+    <span class="data-badge badge-real">Active Gate Inventory</span>
+  </div>
+  <div class="table-responsive">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Campus Name</th>
+          <th>Gate Name</th>
+          <th>Type</th>
+          <th>Connected Road</th>
+          <th>Coordinates</th>
+          <th>Hourly Capacity</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="admin-gates-tbody"></tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function showAdminMessage(msg) {
+  const b = document.getElementById("admin-feedback-banner");
+  const t = document.getElementById("admin-feedback-text");
+  t.textContent = msg;
+  b.style.display = "flex";
+}
+
+async function loadAdminGates() {
+  const resp = await fetch("/api/admin/gates");
+  const data = await resp.json();
+  if (data.status !== "ok") return;
+  const tbody = document.getElementById("admin-gates-tbody");
+  tbody.innerHTML = "";
+  (data.gates || []).forEach((g) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>#${g.id}</td>
+      <td>${g.campus_name}</td>
+      <td><strong>${g.gate_name}</strong></td>
+      <td><span class="data-badge badge-estimated">${g.gate_type}</span></td>
+      <td>${g.connected_road}</td>
+      <td>${g.latitude}, ${g.longitude}</td>
+      <td>${g.max_capacity_per_hour}/hr (${g.vehicle_lanes} lanes)</td>
+      <td><button type="button" class="btn btn-danger btn-sm">Remove</button></td>
+    `;
+    tr.querySelector("button").addEventListener("click", async () => {
+      await fetch(`/api/admin/gates/${g.id}`, { method: "DELETE" });
+      loadAdminGates();
+    });
+    tbody.appendChild(tr);
+  });
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  loadAdminGates();
+
+  document.getElementById("admin-login-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const resp = await fetch("/api/admin/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: document.getElementById("adm-user").value,
+        password: document.getElementById("adm-pass").value,
+      }),
+    });
+    const data = await resp.json();
+    const badge = document.getElementById("admin-auth-badge");
+    if (resp.ok && data.authenticated) {
+      badge.className = "data-badge badge-real";
+      badge.textContent = `Authenticated: ${data.username}`;
+      showAdminMessage(`Administrator '${data.username}' authenticated successfully.`);
+    } else {
+      badge.className = "data-badge badge-demo";
+      badge.textContent = "Login Failed";
+      showAdminMessage(data.error || "Authentication failed.");
+    }
+  });
+
+  document.getElementById("admin-gate-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const resp = await fetch("/api/admin/gates", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        campus_name: document.getElementById("gate-campus").value,
+        gate_name: document.getElementById("gate-name").value,
+        gate_type: document.getElementById("gate-type").value,
+        max_capacity_per_hour: parseInt(document.getElementById("gate-cap").value, 10),
+        latitude: parseFloat(document.getElementById("gate-lat").value),
+        longitude: parseFloat(document.getElementById("gate-lon").value),
+        connected_road: document.getElementById("gate-road").value,
+      }),
+    });
+    if (resp.ok) {
+      showAdminMessage("Registered new campus gate successfully.");
+      loadAdminGates();
+    }
+  });
+
+  document.getElementById("admin-campus-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const resp = await fetch("/api/admin/campuses", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        label: document.getElementById("camp-label").value,
+        city: document.getElementById("camp-city").value,
+        locality: document.getElementById("camp-locality").value,
+        latitude: parseFloat(document.getElementById("camp-lat").value),
+        longitude: parseFloat(document.getElementById("camp-lon").value),
+        formatted_address: document.getElementById("camp-addr").value,
+      }),
+    });
+    if (resp.ok) {
+      showAdminMessage("Added new campus location to registry.");
+    }
+  });
+
+  document.getElementById("admin-retrain-btn")?.addEventListener("click", async () => {
+    showAdminMessage("Regenerating synthetic dataset and retraining Scikit-Learn Random Forest models...");
+    const resp = await fetch("/api/admin/dataset/retrain", { method: "POST" });
+    const data = await resp.json();
+    if (resp.ok) {
+      showAdminMessage(`ML Model Retrained! Synthetic Holdout R² = ${data.metadata?.synthetic_test_metrics?.crowd_r2}`);
+    }
+  });
+});
+</script>
+{% endblock %}
+

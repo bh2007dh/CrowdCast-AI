@@ -1,0 +1,383 @@
+{% extends "base.html" %}
+{% block title %}Live Location Dashboard — CrowdCast AI{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Live Location &amp; Surrounding Area Recognition</h1>
+    <p class="page-subtitle">
+      Detect your coordinates via Browser Geolocation or Manual Search, reverse-geocode into locality details, and inspect nearby roads and POIs across 500m–10km.
+    </p>
+  </div>
+  <div style="display: flex; gap: 0.6rem; flex-wrap: wrap;">
+    <button type="button" id="dash-detect-gps-btn" class="btn btn-primary">
+      Detect / Refresh My Location
+    </button>
+    <button type="button" id="dash-rescan-area-btn" class="btn btn-secondary">
+      Rescan Surrounding Area
+    </button>
+  </div>
+</div>
+
+<div id="dash-permission-banner" class="notice-banner notice-info">
+  <div>
+    <strong>Location Privacy &amp; Control:</strong> CrowdCast AI only reads your GPS coordinates when you click
+    <em>Detect / Refresh My Location</em>. If GPS permission is denied, use the <strong>Manual Location Search</strong> panel below.
+  </div>
+  <span id="dash-source-badge" class="data-badge badge-demo">Loading Location...</span>
+</div>
+
+<!-- Top Location Metadata KPIs -->
+<div class="grid-4" style="margin-bottom: 1.25rem;">
+  <div class="kpi-card">
+    <span class="kpi-label">Detected City &amp; Locality</span>
+    <div class="kpi-value" id="dash-locality" style="font-size: 1.25rem;">Guindy</div>
+    <div class="kpi-meta" id="dash-city">Chennai</div>
+  </div>
+  <div class="kpi-card">
+    <span class="kpi-label">Latitude &amp; Longitude</span>
+    <div class="kpi-value" id="dash-coords" style="font-size: 1.25rem; color: var(--accent-cyan);">13.0108, 80.2354</div>
+    <div class="kpi-meta" id="dash-acquisition-mode">Mode: Reference Preset</div>
+  </div>
+  <div class="kpi-card">
+    <span class="kpi-label">Nearby Area &amp; Street Context</span>
+    <div class="kpi-value" id="dash-area-name" style="font-size: 1.12rem;">Anna University Corridor</div>
+    <div class="kpi-meta" id="dash-address" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Sardar Patel Road</div>
+  </div>
+  <div class="kpi-card">
+    <span class="kpi-label">Active Search Radius</span>
+    <div style="margin: 0.4rem 0;">
+      <select id="dash-radius-select" class="form-select">
+        <option value="500">500 metres</option>
+        <option value="1000" selected>1 kilometre</option>
+        <option value="2000">2 kilometres</option>
+        <option value="5000">5 kilometres</option>
+        <option value="10000">10 kilometres</option>
+      </select>
+    </div>
+    <div class="kpi-meta" id="dash-roads-count">Scanning roads &amp; POIs...</div>
+  </div>
+</div>
+
+<!-- Map + Manual Location Search / Quick Campus Selector -->
+<div class="grid-sidebar" style="margin-bottom: 1.25rem;">
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Detected Location &amp; Surrounding Infrastructure Map</h2>
+      <span id="dash-osm-badge" class="data-badge badge-real">OpenStreetMap</span>
+    </div>
+    <div id="dashboard-map" class="map-container"></div>
+    <div class="map-legend">
+      <span class="legend-item"><span class="legend-dot" style="background: #3b82f6;"></span> Detected User Location</span>
+      <span class="legend-item"><span class="legend-dot" style="background: #06b6d4;"></span> Main Arterial Roads</span>
+      <span class="legend-item"><span class="legend-dot" style="background: #8b5cf6;"></span> Secondary Roads</span>
+      <span class="legend-item"><span class="legend-dot" style="background: #ef4444;"></span> Intersections &amp; Signal Junctions</span>
+      <span class="legend-item"><span class="legend-dot" style="background: #10b981;"></span> Colleges, Transit, Hospitals &amp; Venues</span>
+    </div>
+  </div>
+
+  <div class="card" id="manual-search-panel">
+    <div class="card-header">
+      <h2 class="card-title">Manual Location Search &amp; Fallback</h2>
+      <span class="data-badge badge-estimated">GPS Fallback</span>
+    </div>
+    <p style="font-size: 0.83rem; color: var(--text-muted); margin-bottom: 0.85rem;">
+      If browser GPS permission is denied or you want to inspect another city, university campus, or transit hub, search by place name or enter coordinates directly.
+    </p>
+    <form id="manual-search-form" style="display: flex; gap: 0.5rem; margin-bottom: 0.85rem;">
+      <input type="text" id="manual-search-input" class="form-control" placeholder="Search city, campus, area (e.g., Chennai, Bengaluru, IIT)..." required />
+      <button type="submit" class="btn btn-primary">Search</button>
+    </form>
+
+    <div id="manual-search-results" style="max-height: 210px; overflow-y: auto; margin-bottom: 1rem;"></div>
+
+    <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 0.85rem 0;" />
+    <h3 style="font-size: 0.88rem; font-weight: 700; margin-bottom: 0.6rem;">Direct Coordinate Entry</h3>
+    <form id="direct-coord-form" class="grid-2" style="gap: 0.6rem;">
+      <div>
+        <label class="form-label" for="direct-lat">Latitude (-90 to 90)</label>
+        <input type="number" step="any" id="direct-lat" class="form-control" value="13.0108" required />
+      </div>
+      <div>
+        <label class="form-label" for="direct-lon">Longitude (-180 to 180)</label>
+        <input type="number" step="any" id="direct-lon" class="form-control" value="80.2354" required />
+      </div>
+      <div style="grid-column: span 2;">
+        <button type="submit" class="btn btn-secondary" style="width: 100%;">Set Active Coordinates</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- 11-Category Surrounding Area Recognition Breakdown -->
+<div class="card" style="margin-bottom: 1.25rem;">
+  <div class="card-header">
+    <h2 class="card-title">Surrounding Area Recognition (11 Infrastructure Categories)</h2>
+    <span style="font-size: 0.8rem; color: var(--text-muted);">
+      Note: Not every local road is monitored by a live traffic provider; unmonitored segments are analyzed via road capacity estimation.
+    </span>
+  </div>
+  <div id="dash-category-grid" class="grid-4" style="gap: 0.85rem;"></div>
+</div>
+
+<!-- Nearby-Area Analysis Module: Important Road Segments & Potential Congestion Points -->
+<div class="grid-2">
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Important Road Segments &amp; Provider Coverage</h2>
+      <span class="data-badge badge-real">Road Network Analysis</span>
+    </div>
+    <div class="table-responsive">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Road Name</th>
+            <th>Category</th>
+            <th>Lanes / Cap</th>
+            <th>Provider Monitored</th>
+          </tr>
+        </thead>
+        <tbody id="dash-roads-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Potential Congestion Choke Points</h2>
+      <span class="data-badge badge-estimated">Spatial Choke Analysis</span>
+    </div>
+    <div class="table-responsive">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Location / Junction</th>
+            <th>Category</th>
+            <th>Congestion Risk Factor</th>
+          </tr>
+        </thead>
+        <tbody id="dash-chokepoints-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let dashMap = null;
+let dashLayerGroup = null;
+let dashCircle = null;
+
+function initDashboardMap(loc) {
+  if (!dashMap) {
+    dashMap = L.map("dashboard-map").setView([loc.latitude, loc.longitude], 14);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: "&copy; OpenStreetMap contributors",
+    }).addTo(dashMap);
+    dashLayerGroup = L.layerGroup().addTo(dashMap);
+  } else {
+    dashMap.setView([loc.latitude, loc.longitude], 14);
+  }
+}
+
+async function refreshDashboardData() {
+  const loc = CrowdCastState.getLocation();
+  document.getElementById("dash-locality").textContent = loc.locality || "Detected Sector";
+  document.getElementById("dash-city").textContent = loc.city || "Urban Zone";
+  document.getElementById("dash-coords").textContent = `${Number(loc.latitude).toFixed(5)}, ${Number(loc.longitude).toFixed(5)}`;
+  document.getElementById("dash-area-name").textContent = loc.area_name || loc.locality || "Active Zone";
+  document.getElementById("dash-address").textContent = loc.formatted_address || "";
+  document.getElementById("dash-acquisition-mode").textContent = `Source: ${loc.acquisition_mode || "preset"}`;
+  document.getElementById("dash-radius-select").value = String(loc.radius_m || 1000);
+  document.getElementById("direct-lat").value = loc.latitude;
+  document.getElementById("direct-lon").value = loc.longitude;
+
+  const badge = document.getElementById("dash-source-badge");
+  if (loc.acquisition_mode === "browser_geolocation") {
+    badge.className = "data-badge badge-real";
+    badge.textContent = "Real Data: Browser GPS Coordinates";
+  } else if (loc.acquisition_mode === "manual_search") {
+    badge.className = "data-badge badge-estimated";
+    badge.textContent = "User Selected: Manual Search Coordinates";
+  } else {
+    badge.className = "data-badge badge-demo";
+    badge.textContent = "Reference Campus Coordinates";
+  }
+
+  initDashboardMap(loc);
+  dashLayerGroup.clearLayers();
+
+  if (dashCircle) dashMap.removeLayer(dashCircle);
+  dashCircle = L.circle([loc.latitude, loc.longitude], {
+    radius: Number(loc.radius_m || 1000),
+    color: "#3b82f6",
+    fillColor: "#3b82f6",
+    fillOpacity: 0.08,
+    weight: 1.5,
+  }).addTo(dashMap);
+
+  L.circleMarker([loc.latitude, loc.longitude], {
+    radius: 9,
+    fillColor: "#3b82f6",
+    color: "#ffffff",
+    weight: 2.5,
+    fillOpacity: 1,
+  })
+    .bindPopup(`<strong>Active Center</strong><br>${loc.formatted_address || ""}`)
+    .addTo(dashLayerGroup);
+
+  // Fetch nearby roads and 11 categories
+  const resp = await fetch(`/api/location/nearby?lat=${loc.latitude}&lon=${loc.longitude}&radius_m=${loc.radius_m || 1000}`);
+  const data = await resp.json();
+  if (data.status !== "ok") return;
+
+  const sur = data.surrounding;
+  const osmBadge = document.getElementById("dash-osm-badge");
+  osmBadge.textContent = sur.data_label;
+  osmBadge.className = sur.data_source.includes("live") ? "data-badge badge-real" : "data-badge badge-demo";
+
+  document.getElementById("dash-roads-count").textContent = `${sur.roads.length} Roads & ${sur.places.length + sur.intersections.length} POIs found`;
+
+  // Render roads on map
+  sur.roads.forEach((r) => {
+    const color = r.road_category === "Main roads" ? "#06b6d4" : "#8b5cf6";
+    if (r.coordinates && r.coordinates.length >= 2) {
+      L.polyline(r.coordinates, { color, weight: r.road_category === "Main roads" ? 5 : 3, opacity: 0.85 })
+        .bindPopup(`<strong>${r.road_name}</strong><br>${r.road_category} (${r.lanes} lanes, ~${r.capacity_vph} vph)`)
+        .addTo(dashLayerGroup);
+    }
+  });
+
+  // Render intersections
+  sur.intersections.forEach((inter) => {
+    L.circleMarker([inter.latitude, inter.longitude], {
+      radius: 6,
+      fillColor: "#ef4444",
+      color: "#fff",
+      weight: 1.5,
+      fillOpacity: 0.9,
+    })
+      .bindPopup(`<strong>${inter.name}</strong><br>Category: ${inter.category}`)
+      .addTo(dashLayerGroup);
+  });
+
+  // Render POIs
+  sur.places.forEach((p) => {
+    L.circleMarker([p.latitude, p.longitude], {
+      radius: 6,
+      fillColor: "#10b981",
+      color: "#0f172a",
+      weight: 1.5,
+      fillOpacity: 0.9,
+    })
+      .bindPopup(`<strong>${p.name}</strong><br>Category: ${p.category} (${p.distance_m}m)`)
+      .addTo(dashLayerGroup);
+  });
+
+  // Render 11 category counts
+  const catGrid = document.getElementById("dash-category-grid");
+  catGrid.innerHTML = "";
+  Object.entries(sur.category_counts || {}).forEach(([catName, count]) => {
+    const div = document.createElement("div");
+    div.className = "kpi-card";
+    div.style.padding = "0.85rem 1rem";
+    div.innerHTML = `
+      <span class="kpi-label">${catName}</span>
+      <div class="kpi-value" style="font-size: 1.45rem;">${count}</div>
+      <div class="kpi-meta">Within ${loc.radius_m || 1000}m radius</div>
+    `;
+    catGrid.appendChild(div);
+  });
+
+  // Render important roads table
+  const roadsTbody = document.getElementById("dash-roads-tbody");
+  roadsTbody.innerHTML = "";
+  (sur.area_analysis?.important_road_segments || sur.roads.slice(0, 6)).forEach((r) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><strong>${r.road_name}</strong></td>
+      <td>${r.road_category} (${r.road_type})</td>
+      <td>${r.lanes} lanes / ${r.capacity_vph} vph</td>
+      <td>
+        ${
+          r.provider_monitored
+            ? '<span class="data-badge badge-real">Monitored Arterial</span>'
+            : '<span class="data-badge badge-estimated">Unmonitored (Capacity Est.)</span>'
+        }
+      </td>
+    `;
+    roadsTbody.appendChild(tr);
+  });
+
+  // Render choke points table
+  const chokeTbody = document.getElementById("dash-chokepoints-tbody");
+  chokeTbody.innerHTML = "";
+  (sur.area_analysis?.potential_congestion_points || []).forEach((cp) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><strong>${cp.name}</strong></td>
+      <td>${cp.type}</td>
+      <td>${cp.risk_reason}</td>
+    `;
+    chokeTbody.appendChild(tr);
+  });
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  refreshDashboardData();
+
+  window.addEventListener("crowdcast:locationChanged", () => {
+    refreshDashboardData();
+  });
+
+  document.getElementById("dash-detect-gps-btn")?.addEventListener("click", async () => {
+    await CrowdCastState.requestBrowserGeolocation();
+  });
+
+  document.getElementById("dash-rescan-area-btn")?.addEventListener("click", () => {
+    refreshDashboardData();
+  });
+
+  document.getElementById("dash-radius-select")?.addEventListener("change", async (e) => {
+    const loc = CrowdCastState.getLocation();
+    await CrowdCastState.setLocationFromCoordinates(loc.latitude, loc.longitude, loc.acquisition_mode, Number(e.target.value));
+  });
+
+  document.getElementById("manual-search-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const q = document.getElementById("manual-search-input").value.trim();
+    if (!q) return;
+    const container = document.getElementById("manual-search-results");
+    container.innerHTML = "<p style='font-size:0.84rem;'>Searching locations...</p>";
+    const resp = await fetch(`/api/location/search?q=${encodeURIComponent(q)}`);
+    const data = await resp.json();
+    container.innerHTML = "";
+    (data.results || []).forEach((item) => {
+      const row = document.createElement("div");
+      row.style.cssText = "padding: 0.55rem; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; gap: 0.5rem;";
+      row.innerHTML = `
+        <div style="font-size: 0.82rem;">
+          <strong>${item.name}</strong><br>
+          <span style="color: var(--text-muted);">${item.formatted_address}</span>
+        </div>
+        <button type="button" class="btn btn-primary btn-sm">Select</button>
+      `;
+      row.querySelector("button").addEventListener("click", async () => {
+        await CrowdCastState.setLocationFromCoordinates(item.latitude, item.longitude, "manual_search");
+      });
+      container.appendChild(row);
+    });
+  });
+
+  document.getElementById("direct-coord-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const lat = parseFloat(document.getElementById("direct-lat").value);
+    const lon = parseFloat(document.getElementById("direct-lon").value);
+    await CrowdCastState.setLocationFromCoordinates(lat, lon, "manual_search");
+  });
+});
+</script>
+{% endblock %}
+

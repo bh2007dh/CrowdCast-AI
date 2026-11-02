@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+{% block title %}Analytical Reports & CSV Export — CrowdCast AI{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Analytical Intelligence Reports &amp; CSV Export</h1>
+    <p class="page-subtitle">
+      Consolidated Location Analysis, Traffic Summary, ML Crowd Prediction History, and Event Impact Reports with one-click CSV export.
+    </p>
+  </div>
+  <div style="display: flex; gap: 0.65rem;">
+    <button type="button" id="rep-refresh-btn" class="btn btn-secondary">
+      Refresh Report Data
+    </button>
+    <a href="/api/reports/csv" class="btn btn-primary" download>
+      Download Complete CSV Report
+    </a>
+  </div>
+</div>
+
+<!-- Summary KPI Row -->
+<div class="grid-4" style="margin-bottom: 1.25rem;">
+  <div class="kpi-card">
+    <span class="kpi-label">Observed Average Speed</span>
+    <div class="kpi-value" id="rep-avg-speed">-- km/h</div>
+    <div class="kpi-meta" id="rep-obs-count">-- traffic snapshots</div>
+  </div>
+  <div class="kpi-card">
+    <span class="kpi-label">Average Corridor Delay</span>
+    <div class="kpi-value" id="rep-avg-delay">-- sec</div>
+    <div class="kpi-meta" id="rep-provider-mode">Provider mode</div>
+  </div>
+  <div class="kpi-card">
+    <span class="kpi-label">ML Crowd Forecasts Logged</span>
+    <div class="kpi-value" id="rep-pred-count">--</div>
+    <div class="kpi-meta">Stored in SQLite database</div>
+  </div>
+  <div class="kpi-card">
+    <span class="kpi-label">Scheduled Event Visitors</span>
+    <div class="kpi-value" id="rep-event-visitors">--</div>
+    <div class="kpi-meta" id="rep-event-vehicles">-- expected vehicles</div>
+  </div>
+</div>
+
+<!-- 1. Location Analysis & 2. Traffic Observations -->
+<div class="grid-2" style="margin-bottom: 1.25rem;">
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">1. Location &amp; Infrastructure Analysis Report</h2>
+      <span class="data-badge badge-real">Geospatial Summary</span>
+    </div>
+    <div class="table-responsive">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Zone Label</th>
+            <th>City / Locality</th>
+            <th>Coordinates (Coarse)</th>
+            <th>Radius</th>
+            <th>Data Source</th>
+          </tr>
+        </thead>
+        <tbody id="rep-locations-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">2. Recent Traffic Flow Summary</h2>
+      <span class="data-badge badge-demo">Provenance Tagged</span>
+    </div>
+    <div class="table-responsive">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Road Segment</th>
+            <th>Speed (Cur / FF)</th>
+            <th>Delay</th>
+            <th>Congestion</th>
+            <th>Source Mode</th>
+          </tr>
+        </thead>
+        <tbody id="rep-traffic-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- 3. Crowd Prediction Report & 4. Event Impact Report -->
+<div class="grid-2">
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">3. ML Crowd &amp; Fusion Prediction Report</h2>
+      <span class="data-badge badge-estimated">ML Forecast Log</span>
+    </div>
+    <div class="table-responsive">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Location</th>
+            <th>Est. Crowd</th>
+            <th>+15 / +30 / +60m</th>
+            <th>Peak Window</th>
+            <th>Congestion</th>
+          </tr>
+        </thead>
+        <tbody id="rep-crowd-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">4. Event Impact Analysis Report</h2>
+      <span class="data-badge badge-real">Normal vs Event Day</span>
+    </div>
+    <div class="table-responsive">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Event &amp; Category</th>
+            <th>Visitors / Vehicles</th>
+            <th>Baseline vs Event Crowd</th>
+            <th>Surge %</th>
+          </tr>
+        </thead>
+        <tbody id="rep-events-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function loadReportsSummary() {
+  const resp = await fetch("/api/reports/summary");
+  const data = await resp.json();
+  if (data.status !== "ok") return;
+
+  const tf = data.traffic_summary || {};
+  const cp = data.crowd_prediction_report || {};
+  const ev = data.event_impact_report || {};
+  const locRep = data.location_analysis_report || {};
+
+  document.getElementById("rep-avg-speed").textContent = `${tf.average_observed_speed_kmh || "--"} km/h`;
+  document.getElementById("rep-obs-count").textContent = `${tf.recent_observations_count || 0} recent observations`;
+  document.getElementById("rep-avg-delay").textContent = `+${tf.average_delay_seconds || 0} sec`;
+  document.getElementById("rep-provider-mode").textContent = data.provider_status?.mode || "DEMONSTRATION_MODE";
+  document.getElementById("rep-pred-count").textContent = cp.predictions_logged || 0;
+  document.getElementById("rep-event-visitors").textContent = `${(ev.total_expected_participants || 0).toLocaleString()} visitors`;
+  document.getElementById("rep-event-vehicles").textContent = `${(ev.total_expected_vehicles || 0).toLocaleString()} expected vehicles`;
+
+  const locTbody = document.getElementById("rep-locations-tbody");
+  locTbody.innerHTML = "";
+  (locRep.active_locations || []).forEach((l) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><strong>${l.label}</strong></td>
+      <td>${l.city} / ${l.locality}</td>
+      <td>${l.latitude}, ${l.longitude}</td>
+      <td>${l.radius_m}m</td>
+      <td><code>${l.data_source}</code></td>
+    `;
+    locTbody.appendChild(tr);
+  });
+
+  const tfTbody = document.getElementById("rep-traffic-tbody");
+  tfTbody.innerHTML = "";
+  (tf.observations || []).slice(0, 8).forEach((t) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><strong>${t.road_name}</strong></td>
+      <td>${t.current_speed_kmh} / ${t.free_flow_speed_kmh} km/h</td>
+      <td>+${t.delay_seconds}s</td>
+      <td><span class="traffic-pill traffic-${t.color_code}">${t.color_code}: ${t.congestion_level}</span></td>
+      <td>${t.is_simulated ? '<span class="data-badge badge-demo">Demo Sample</span>' : '<span class="data-badge badge-real">Live API</span>'}</td>
+    `;
+    tfTbody.appendChild(tr);
+  });
+
+  const cpTbody = document.getElementById("rep-crowd-tbody");
+  cpTbody.innerHTML = "";
+  (cp.recent_crowd_predictions || []).slice(0, 8).forEach((p) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><strong>${p.location_label}</strong></td>
+      <td>${p.estimated_crowd_count} (${p.crowd_level})</td>
+      <td>${p.pred_15m} / ${p.pred_30m} / ${p.pred_60m}</td>
+      <td>${p.predicted_peak_time}</td>
+      <td><span class="traffic-pill traffic-${p.expected_congestion_level}">${p.expected_congestion_level}</span></td>
+    `;
+    cpTbody.appendChild(tr);
+  });
+
+  const evTbody = document.getElementById("rep-events-tbody");
+  evTbody.innerHTML = "";
+  (ev.events || []).forEach((e) => {
+    const imp = e.impact_analysis || {};
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><strong>${e.event_name}</strong><br><span style="font-size:0.75rem; color:var(--text-muted);">${e.event_category} (${e.event_date})</span></td>
+      <td>${e.expected_participants.toLocaleString()} / ${e.expected_vehicles} veh</td>
+      <td>${imp.normal_baseline_crowd || "--"} &rarr; <strong>${imp.event_day_predicted_crowd || "--"}</strong></td>
+      <td><span class="traffic-pill traffic-Orange">+${imp.crowd_surge_percentage || 0}%</span></td>
+    `;
+    evTbody.appendChild(tr);
+  });
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  loadReportsSummary();
+  document.getElementById("rep-refresh-btn")?.addEventListener("click", loadReportsSummary);
+});
+</script>
+{% endblock %}
+

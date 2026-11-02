@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% block title %}CrowdCast AI — Intelligent Crowd & Traffic Prediction Platform{% endblock %}
+
+{% block content %}
+<div class="card" style="padding: 2.2rem; margin-bottom: 1.5rem; background: linear-gradient(135deg, rgba(30, 41, 59, 0.96), rgba(15, 23, 42, 0.96));">
+  <div style="display: flex; flex-wrap: wrap; gap: 0.6rem; margin-bottom: 1rem;">
+    <span class="data-badge badge-real">Browser Geolocation &amp; OpenStreetMap</span>
+    <span class="data-badge badge-estimated">Scikit-Learn Random Forest Crowd Forecasting</span>
+    <span class="data-badge badge-demo">Multi-Factor Crowd–Traffic Fusion Engine</span>
+  </div>
+
+  <h1 style="font-size: 2.35rem; font-weight: 900; letter-spacing: -0.03em; margin-bottom: 0.75rem;">
+    CrowdCast AI: Location-Aware Intelligent Crowd &amp; Traffic Prediction System
+  </h1>
+  <p style="font-size: 1.05rem; color: var(--text-secondary); max-width: 880px; margin-bottom: 1.5rem;">
+    CrowdCast AI recognizes your actual geographical coordinates, inspects the surrounding OpenStreetMap road network
+    and high-attractor institutions (colleges, transit stations, hospitals, event venues), integrates real-time or
+    clearly labelled demonstration traffic flows, forecasts 15/30/60-minute crowd trends via Machine Learning, and
+    computes an actionable <strong>0–100 Congestion Risk Score</strong> with smart route and campus gate allocations.
+  </p>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 0.85rem; align-items: center;">
+    <button type="button" id="hero-start-gps-btn" class="btn btn-primary" style="padding: 0.75rem 1.4rem; font-size: 0.98rem;">
+      Start Location-Based Analysis (Detect GPS)
+    </button>
+    <a href="{{ url_for('dashboard_page') }}" class="btn btn-secondary" style="padding: 0.75rem 1.3rem; font-size: 0.96rem;">
+      Open Live Location Dashboard
+    </a>
+    <a href="{{ url_for('congestion_page') }}" class="btn btn-secondary" style="padding: 0.75rem 1.3rem; font-size: 0.96rem;">
+      Run Crowd–Traffic Fusion Engine
+    </a>
+  </div>
+  <p id="hero-gps-feedback" style="margin-top: 0.85rem; font-size: 0.88rem; color: var(--accent-cyan);"></p>
+</div>
+
+<!-- Core Capabilities Grid -->
+<div class="grid-3" style="margin-bottom: 1.5rem;">
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">1. Automatic Location &amp; Area Recognition</h2>
+      <span class="data-badge badge-real">Real Geospatial</span>
+    </div>
+    <p style="font-size: 0.88rem; color: var(--text-secondary); margin-bottom: 0.85rem;">
+      Requests explicit browser GPS permission (never tracks continuously in the background), reverse-geocodes into
+      city, locality, and street address via Nominatim, and queries Overpass API across configurable radii
+      (500m to 10km) for 11 infrastructure categories.
+    </p>
+    <a href="{{ url_for('dashboard_page') }}" class="btn btn-secondary btn-sm">Explore Surrounding Area &rarr;</a>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">2. Modular Traffic Flow &amp; Incident Service</h2>
+      {% if provider_status.api_key_configured %}
+        <span class="data-badge badge-real">Live TomTom API</span>
+      {% else %}
+        <span class="data-badge badge-demo">Demo Fallback Active</span>
+      {% endif %}
+    </div>
+    <p style="font-size: 0.88rem; color: var(--text-secondary); margin-bottom: 0.85rem;">
+      Retrieves current speed, free-flow speed, traffic delay, and Green/Yellow/Orange/Red road congestion levels.
+      When <code>TOMTOM_API_KEY</code> is absent, switches transparently to clearly labelled Demonstration Mode
+      without fabricating live claims.
+    </p>
+    <a href="{{ url_for('traffic_page') }}" class="btn btn-secondary btn-sm">Open Interactive Traffic Map &rarr;</a>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">3. ML Crowd &amp; 0–100 Fusion Risk Engine</h2>
+      <span class="data-badge badge-estimated">Scikit-Learn RF</span>
+    </div>
+    <p style="font-size: 0.88rem; color: var(--text-secondary); margin-bottom: 0.85rem;">
+      Forecasts crowd levels for +15m, +30m, and +60m horizons using a Random Forest ensemble trained on a
+      documented synthetic dataset. Fuses traffic (35%), crowd (30%), historical peaks (20%), and events (15%)
+      into a 0–100 risk score.
+    </p>
+    <a href="{{ url_for('prediction_page') }}" class="btn btn-secondary btn-sm">Launch ML Forecast &rarr;</a>
+  </div>
+</div>
+
+<!-- Data Transparency & Provenance Matrix -->
+<div class="card">
+  <div class="card-header">
+    <h2 class="card-title">Data Integrity &amp; Provenance Classification Matrix</h2>
+    <span class="data-badge badge-real">Strict Verification</span>
+  </div>
+  <div class="table-responsive">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Subsystem / Module</th>
+          <th>Primary Provider / Engine</th>
+          <th>Current Runtime Status</th>
+          <th>Data Classification Badge</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>User Location Coordinates</strong></td>
+          <td>W3C Browser Geolocation API + Manual Search Fallback</td>
+          <td>On-demand permission request (no background tracking)</td>
+          <td><span class="data-badge badge-real">Real User Coordinates / Manual Input</span></td>
+        </tr>
+        <tr>
+          <td><strong>Reverse Geocoding &amp; Nearby POIs</strong></td>
+          <td>OpenStreetMap Nominatim &amp; Overpass API</td>
+          <td>Live query with offline coordinate-anchored fallback</td>
+          <td><span class="data-badge badge-real">Real Geospatial Data</span></td>
+        </tr>
+        <tr>
+          <td><strong>Road Traffic Flow &amp; Incidents</strong></td>
+          <td>TomTom Traffic API v4/v5 (Modular Provider Service)</td>
+          <td>{{ provider_status.status_message }}</td>
+          <td>
+            {% if provider_status.api_key_configured %}
+              <span class="data-badge badge-real">Real-Time Traffic API</span>
+            {% else %}
+              <span class="data-badge badge-demo">Demonstration Sample Traffic</span>
+            {% endif %}
+          </td>
+        </tr>
+        <tr>
+          <td><strong>Crowd Horizon Forecasting (+15/+30/+60m)</strong></td>
+          <td>Scikit-Learn RandomForestRegressor &amp; Classifier</td>
+          <td>Trained on 1,800-row synthetic diurnal/event dataset (<code>ml/dataset.csv</code>)</td>
+          <td><span class="data-badge badge-estimated">Estimated ML Output (Synthetic Training Data)</span></td>
+        </tr>
+        <tr>
+          <td><strong>Alternative Route Geometry</strong></td>
+          <td>OSRM (OpenStreetMap Routing Machine)</td>
+          <td>Geometric road routing overlaid with estimated corridor risk</td>
+          <td><span class="data-badge badge-estimated">Geometric Route (Not Live Traffic-Aware)</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById("hero-start-gps-btn")?.addEventListener("click", async () => {
+  const feedback = document.getElementById("hero-gps-feedback");
+  const loc = await CrowdCastState.requestBrowserGeolocation((msg) => {
+    if (feedback) feedback.textContent = msg;
+  });
+  if (loc) {
+    window.location.href = "{{ url_for('dashboard_page') }}";
+  }
+});
+</script>
+{% endblock %}
+

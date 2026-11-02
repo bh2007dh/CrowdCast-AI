@@ -1,0 +1,400 @@
+{% extends "base.html" %}
+{% block title %}Crowd–Traffic Fusion & Smart Route Recommendations — CrowdCast AI{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Crowd–Traffic Fusion Engine &amp; Smart Gate / Route Recommendations</h1>
+    <p class="page-subtitle">
+      Calculates a 0–100 Congestion Risk Score combining Traffic Flow (35%), Expected Crowd (30%), Historical Peaks (20%), and Event Impact (15%), plus OSRM alternative routes and campus gate allocations.
+    </p>
+  </div>
+  <button type="button" id="fusion-recalc-btn" class="btn btn-primary">
+    Recalculate Fusion &amp; Routes
+  </button>
+</div>
+
+<div class="notice-banner notice-info">
+  <div>
+    <strong>Fusion Weighting &amp; Routing Transparency:</strong>
+    Initial demonstration weights (35% Traffic, 30% Crowd, 20% Historical, 15% Event) are configurable below or in Admin.
+    Alternative routes from OpenStreetMap (OSRM) represent <strong>geometric road paths</strong> overlaid with estimated corridor risk—not live commercial turn-by-turn traffic telemetry.
+  </div>
+  <span id="fusion-source-badge" class="data-badge badge-estimated">Hybrid Fusion Engine</span>
+</div>
+
+<!-- Top Fusion Risk Score Gauge & Sub-scores -->
+<div class="grid-sidebar" style="margin-bottom: 1.25rem;">
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Multi-Factor Congestion Risk Breakdown (0–100 Scale)</h2>
+      <span id="fusion-peak-window" class="data-badge badge-demo">Peak Window: --</span>
+    </div>
+    <div class="grid-2" style="align-items: center; gap: 1.25rem;">
+      <div class="risk-gauge-box">
+        <div class="kpi-label">Composite Congestion Risk Score</div>
+        <div id="fusion-score-val" class="risk-score-number" style="color: var(--traffic-orange);">--</div>
+        <div style="margin: 0.45rem 0;">
+          <span id="fusion-risk-pill" class="traffic-pill traffic-Orange">--</span>
+        </div>
+        <p id="fusion-summary-text" style="font-size: 0.84rem; color: var(--text-secondary); margin-top: 0.4rem;"></p>
+      </div>
+      <div>
+        <canvas id="fusionSubscoresChart" height="190"></canvas>
+      </div>
+    </div>
+
+    <div style="margin-top: 1.15rem;">
+      <h3 style="font-size: 0.9rem; font-weight: 700; margin-bottom: 0.6rem;">Main Contributing Factors (Ranked by Weighted Impact)</h3>
+      <div id="fusion-factors-list" class="grid-2" style="gap: 0.7rem;"></div>
+    </div>
+  </div>
+
+  <!-- Recommended Actions + Interactive Weight Tuner -->
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Recommended Actions &amp; Weight Configuration</h2>
+      <span class="data-badge badge-real">Decision Support</span>
+    </div>
+    <div style="margin-bottom: 1rem;">
+      <h3 style="font-size: 0.86rem; color: var(--accent-cyan); margin-bottom: 0.45rem;">Recommended Location-Specific Actions:</h3>
+      <ul id="fusion-actions-list" style="padding-left: 1.2rem; font-size: 0.85rem; color: var(--text-secondary); line-height: 1.65;"></ul>
+    </div>
+
+    <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 0.9rem 0;" />
+    <h3 style="font-size: 0.86rem; font-weight: 700; margin-bottom: 0.45rem;">Configure Demonstration Fusion Weights</h3>
+    <form id="fusion-weights-form" class="grid-2" style="gap: 0.55rem;">
+      <div>
+        <label class="form-label" for="w-traffic">Traffic Weight (Default 0.35)</label>
+        <input type="number" step="0.05" id="w-traffic" class="form-control" value="0.35" min="0" max="1" />
+      </div>
+      <div>
+        <label class="form-label" for="w-crowd">Crowd Weight (Default 0.30)</label>
+        <input type="number" step="0.05" id="w-crowd" class="form-control" value="0.30" min="0" max="1" />
+      </div>
+      <div>
+        <label class="form-label" for="w-hist">Historical Weight (Default 0.20)</label>
+        <input type="number" step="0.05" id="w-hist" class="form-control" value="0.20" min="0" max="1" />
+      </div>
+      <div>
+        <label class="form-label" for="w-event">Event Weight (Default 0.15)</label>
+        <input type="number" step="0.05" id="w-event" class="form-control" value="0.15" min="0" max="1" />
+      </div>
+      <div style="grid-column: span 2; margin-top: 0.35rem;">
+        <button type="submit" class="btn btn-secondary" style="width: 100%;">Apply Custom Weights &amp; Recompute</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Smart Route Map + Suggested Arrival & Campus Entry Gate Allocation -->
+<div class="grid-sidebar" style="margin-bottom: 1.25rem;">
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Smart Alternative Routes &amp; Campus Gate Map (OSRM)</h2>
+      <span class="data-badge badge-estimated">Geometric Route + Risk Overlay</span>
+    </div>
+    <div id="routing-map" class="map-container" style="height: 410px;"></div>
+    <div class="map-legend">
+      <span class="legend-item"><span class="legend-dot" style="background: #10b981;"></span> Recommended Low-Risk Alternative Route</span>
+      <span class="legend-item"><span class="legend-dot" style="background: #f97316;"></span> Primary Direct Corridor (Higher Queue Risk)</span>
+      <span class="legend-item"><span class="legend-dot" style="background: #3b82f6;"></span> User Origin</span>
+      <span class="legend-item"><span class="legend-dot" style="background: #a855f7;"></span> Registered Campus Entry/Exit Gates</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Arrival Window &amp; Route Options</h2>
+      <span class="data-badge badge-real">Commuter Guidance</span>
+    </div>
+    <div style="padding: 0.8rem; background: var(--bg-surface); border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 0.9rem;">
+      <div class="kpi-label">Suggested Arrival Time Window</div>
+      <div id="rt-arrival-time" style="font-size: 1.25rem; font-weight: 800; color: var(--traffic-green); margin: 0.25rem 0;">--</div>
+      <div id="rt-arrival-advice" style="font-size: 0.82rem; color: var(--text-secondary);"></div>
+    </div>
+
+    <div style="padding: 0.8rem; background: var(--bg-surface); border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 0.9rem;">
+      <div class="kpi-label">Recommended Campus Entry Gate</div>
+      <div id="rt-best-gate" style="font-size: 1.1rem; font-weight: 800; color: var(--accent-cyan); margin: 0.25rem 0;">--</div>
+      <div id="rt-best-gate-meta" style="font-size: 0.82rem; color: var(--text-secondary);"></div>
+    </div>
+
+    <h3 style="font-size: 0.86rem; font-weight: 700; margin-bottom: 0.5rem;">Suggested Alternative Routes</h3>
+    <div id="rt-routes-list" style="display: flex; flex-direction: column; gap: 0.6rem;"></div>
+  </div>
+</div>
+
+<!-- High-Risk Road Segments & Campus Gate Allocation Tables -->
+<div class="grid-2">
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Nearby Road Segments Risk &amp; Capacity Analysis</h2>
+      <span class="data-badge badge-estimated">Volume-to-Capacity (V/C)</span>
+    </div>
+    <div class="table-responsive">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Road Segment</th>
+            <th>Capacity (vph)</th>
+            <th>Est. Demand</th>
+            <th>V/C Ratio</th>
+            <th>Segment Risk</th>
+          </tr>
+        </thead>
+        <tbody id="fusion-roads-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Campus Entry/Exit Gate Demand Allocation</h2>
+      <span class="data-badge badge-real">Gate Load Balancing</span>
+    </div>
+    <div class="table-responsive">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Gate Name &amp; Type</th>
+            <th>Connected Road</th>
+            <th>Max Capacity</th>
+            <th>Allocated Flow</th>
+            <th>Status &amp; Recommendation</th>
+          </tr>
+        </thead>
+        <tbody id="fusion-gates-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let routingMap = null;
+let routingLayer = null;
+let subscoresChart = null;
+
+function initRoutingMap(loc) {
+  if (!routingMap) {
+    routingMap = L.map("routing-map").setView([loc.latitude, loc.longitude], 14);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: "&copy; OpenStreetMap contributors",
+    }).addTo(routingMap);
+    routingLayer = L.layerGroup().addTo(routingMap);
+  } else {
+    routingMap.setView([loc.latitude, loc.longitude], 14);
+  }
+}
+
+async function runFusionEngine(customWeights = null) {
+  const loc = CrowdCastState.getLocation();
+  initRoutingMap(loc);
+  routingLayer.clearLayers();
+
+  const body = {
+    latitude: loc.latitude,
+    longitude: loc.longitude,
+    location_label: `${loc.locality || "Sector"}, ${loc.city || ""}`,
+  };
+  if (customWeights) body.weights = customWeights;
+
+  const resp = await fetch("/api/prediction/congestion", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await resp.json();
+  if (data.status !== "ok") return;
+
+  const f = data.fusion;
+  const scoreEl = document.getElementById("fusion-score-val");
+  scoreEl.textContent = f.congestion_risk_score;
+  scoreEl.style.color = f.hex_color;
+
+  const pillEl = document.getElementById("fusion-risk-pill");
+  pillEl.className = `traffic-pill traffic-${f.color_code}`;
+  pillEl.textContent = `${f.color_code}: ${f.risk_level} Risk (${f.congestion_risk_score}/100)`;
+
+  document.getElementById("fusion-summary-text").textContent = f.summary;
+  document.getElementById("fusion-peak-window").textContent = `Peak: ${f.expected_peak_period}`;
+
+  // Sub-scores horizontal bar chart
+  const sub = f.sub_scores;
+  const ctx = document.getElementById("fusionSubscoresChart").getContext("2d");
+  if (subscoresChart) subscoresChart.destroy();
+  subscoresChart = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels: ["Traffic Flow (35%)", "Crowd Density (30%)", "Historical Peak (20%)", "Event Surge (15%)"],
+      datasets: [
+        {
+          label: "Component Score (0-100)",
+          data: [
+            sub.traffic_congestion_score,
+            sub.expected_crowd_score,
+            sub.historical_pattern_score,
+            sub.event_impact_score,
+          ],
+          backgroundColor: ["#f97316", "#3b82f6", "#8b5cf6", "#10b981"],
+          borderRadius: 6,
+        },
+      ],
+    },
+    options: {
+      indexAxis: "y",
+      responsive: true,
+      scales: { x: { min: 0, max: 100 } },
+      plugins: { legend: { display: false } },
+    },
+  });
+
+  // Main contributing factors
+  const factorsList = document.getElementById("fusion-factors-list");
+  factorsList.innerHTML = "";
+  (f.main_contributing_factors || []).forEach((fac) => {
+    const card = document.createElement("div");
+    card.style.cssText = "padding: 0.7rem; background: var(--bg-surface); border-radius: 8px; border: 1px solid var(--border-color); font-size: 0.82rem;";
+    card.innerHTML = `
+      <div style="display:flex; justify-content:space-between; margin-bottom:0.2rem;">
+        <strong>${fac.factor}</strong>
+        <span style="color:var(--accent-cyan); font-weight:700;">+${fac.weighted_points} pts (W: ${fac.weight_pct}%)</span>
+      </div>
+      <div style="color:var(--text-muted);">${fac.detail}</div>
+    `;
+    factorsList.appendChild(card);
+  });
+
+  // Recommended actions
+  const actionsList = document.getElementById("fusion-actions-list");
+  actionsList.innerHTML = "";
+  (f.recommended_actions || []).forEach((act) => {
+    const li = document.createElement("li");
+    li.style.marginBottom = "0.35rem";
+    li.textContent = act;
+    actionsList.appendChild(li);
+  });
+
+  // Nearby road risks table
+  const roadsTbody = document.getElementById("fusion-roads-tbody");
+  roadsTbody.innerHTML = "";
+  (f.nearby_road_risks || []).forEach((r) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><strong>${r.road_name}</strong> (${r.lanes}L)</td>
+      <td>${r.capacity_vph} vph</td>
+      <td>${r.estimated_demand_vph} vph</td>
+      <td><strong>${r.volume_to_capacity_ratio}</strong></td>
+      <td><span class="traffic-pill traffic-${r.color}">${r.color}: ${r.risk_level} (${r.risk_score})</span></td>
+    `;
+    roadsTbody.appendChild(tr);
+  });
+
+  // Routing & Gates
+  const rg = f.routing_and_gates || {};
+  document.getElementById("rt-arrival-time").textContent = rg.suggested_arrival_time || "Immediate";
+  document.getElementById("rt-arrival-advice").textContent = rg.arrival_advice || "";
+
+  if (rg.suggested_campus_gate) {
+    const g = rg.suggested_campus_gate;
+    document.getElementById("rt-best-gate").textContent = `${g.gate_name} (${g.campus_name})`;
+    document.getElementById("rt-best-gate-meta").textContent = `Connected to ${g.connected_road} • Projected Load: ${g.projected_utilization_pct}% (${g.recommended_allocation_per_hour}/${g.max_capacity_per_hour} per hr)`;
+  }
+
+  // Render Origin Marker
+  L.circleMarker([loc.latitude, loc.longitude], {
+    radius: 8,
+    fillColor: "#3b82f6",
+    color: "#fff",
+    weight: 2,
+    fillOpacity: 1,
+  })
+    .bindPopup("<strong>User Origin Location</strong>")
+    .addTo(routingLayer);
+
+  // Render Routes on Map & Sidebar
+  const routesContainer = document.getElementById("rt-routes-list");
+  routesContainer.innerHTML = "";
+  (rg.suggested_routes || []).forEach((rt) => {
+    const color = rt.is_recommended ? "#10b981" : "#f97316";
+    if (rt.coordinates && rt.coordinates.length >= 2) {
+      L.polyline(rt.coordinates, {
+        color,
+        weight: rt.is_recommended ? 6 : 4,
+        dashArray: rt.is_recommended ? null : "6, 6",
+        opacity: 0.9,
+      })
+        .bindPopup(
+          `<strong>${rt.route_name}</strong><br>` +
+            `Distance: ${rt.distance_km} km | Est. Time: ${rt.estimated_congested_duration_min} min<br>` +
+            `Route Risk Score: ${rt.estimated_congestion_risk_score}/100<br>` +
+            `<em>${rt.routing_type_notice}</em>`
+        )
+        .addTo(routingLayer);
+    }
+
+    const div = document.createElement("div");
+    div.style.cssText = "padding: 0.65rem; border-radius: 8px; background: var(--bg-surface); border: 1px solid var(--border-color); font-size: 0.82rem;";
+    div.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <strong>${rt.route_name}</strong>
+        <span class="traffic-pill ${rt.is_recommended ? 'traffic-Green' : 'traffic-Orange'}">
+          ${rt.is_recommended ? "Recommended" : "High Queue"} (Risk: ${rt.estimated_congestion_risk_score})
+        </span>
+      </div>
+      <div style="color:var(--text-secondary); margin-top:0.25rem;">
+        Distance: <b>${rt.distance_km} km</b> &bull; Geometric Time: ${rt.base_geometric_duration_min}m &bull; Congested Est.: <b>${rt.estimated_congested_duration_min}m</b>
+      </div>
+      <div style="color:var(--text-muted); font-size:0.75rem; margin-top:0.2rem;">${rt.routing_type_notice}</div>
+    `;
+    routesContainer.appendChild(div);
+  });
+
+  // Render Campus Gates on Map & Table
+  const gatesTbody = document.getElementById("fusion-gates-tbody");
+  gatesTbody.innerHTML = "";
+  (rg.all_campus_gates || []).forEach((g) => {
+    L.circleMarker([g.latitude, g.longitude], {
+      radius: 7,
+      fillColor: "#a855f7",
+      color: "#fff",
+      weight: 2,
+      fillOpacity: 0.95,
+    })
+      .bindPopup(`<strong>${g.gate_name}</strong> (${g.gate_type})<br>Road: ${g.connected_road}<br>Utilization: ${g.projected_utilization_pct}%`)
+      .addTo(routingLayer);
+
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><strong>${g.gate_name}</strong><br><span style="font-size:0.76rem; color:var(--text-muted);">${g.gate_type}</span></td>
+      <td>${g.connected_road}</td>
+      <td>${g.max_capacity_per_hour}/hr</td>
+      <td><strong>${g.recommended_allocation_per_hour}/hr</strong> (${g.projected_utilization_pct}%)</td>
+      <td><span class="traffic-pill ${g.projected_utilization_pct < 68 ? 'traffic-Green' : 'traffic-Yellow'}">${g.status_recommendation}</span></td>
+    `;
+    gatesTbody.appendChild(tr);
+  });
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  runFusionEngine();
+  window.addEventListener("crowdcast:locationChanged", () => runFusionEngine());
+  document.getElementById("fusion-recalc-btn")?.addEventListener("click", () => runFusionEngine());
+
+  document.getElementById("fusion-weights-form")?.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const customW = {
+      traffic_congestion: parseFloat(document.getElementById("w-traffic").value),
+      expected_crowd: parseFloat(document.getElementById("w-crowd").value),
+      historical_patterns: parseFloat(document.getElementById("w-hist").value),
+      event_impact: parseFloat(document.getElementById("w-event").value),
+    };
+    runFusionEngine(customW);
+  });
+});
+</script>
+{% endblock %}
+

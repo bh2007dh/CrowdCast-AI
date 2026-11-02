@@ -1,0 +1,48 @@
+{
+  "model_name": "CrowdCast-RF-Ensemble-v1",
+  "trained_at": "2026-11-02T18:55:01.358559+00:00",
+  "dataset_type": "SYNTHETIC_DEMONSTRATION_DATASET",
+  "dataset_disclaimer": "Trained on synthetic demonstration data (ml/dataset.csv). Metrics reflect synthetic holdout split validation, NOT real-world field accuracy.",
+  "total_samples": 1800,
+  "train_samples": 1440,
+  "test_samples": 360,
+  "null_values_checked": {
+    "hour": 0,
+    "day_of_week": 0,
+    "historical_crowd_count": 0,
+    "event_type": 0,
+    "event_start_hour": 0,
+    "event_end_hour": 0,
+    "event_active": 0,
+    "expected_visitors": 0,
+    "nearby_traffic_ratio": 0,
+    "historical_traffic_ratio": 0,
+    "weather_severity": 0,
+    "target_crowd_count": 0,
+    "target_crowd_15m": 0,
+    "target_crowd_30m": 0,
+    "target_crowd_60m": 0,
+    "target_congestion_level": 0,
+    "is_synthetic": 0
+  },
+  "feature_columns": [
+    "hour",
+    "day_of_week",
+    "historical_crowd_count",
+    "event_type",
+    "event_start_hour",
+    "event_end_hour",
+    "event_active",
+    "expected_visitors",
+    "nearby_traffic_ratio",
+    "historical_traffic_ratio",
+    "weather_severity"
+  ],
+  "synthetic_test_metrics": {
+    "crowd_mae": 99.2,
+    "crowd_rmse": 208.28,
+    "crowd_r2": 0.936,
+    "congestion_accuracy": 0.9528,
+    "congestion_f1_weighted": 0.9528
+  }
+}

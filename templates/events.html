@@ -1,0 +1,292 @@
+{% extends "base.html" %}
+{% block title %}Event-Aware Prediction & Management — CrowdCast AI{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Event-Aware Crowd &amp; Traffic Impact Management</h1>
+    <p class="page-subtitle">
+      Register college symposiums, technical festivals, sports events, admissions, seminars, cultural events, and public gatherings, and compare Normal vs. Event-Day traffic &amp; crowd patterns.
+    </p>
+  </div>
+</div>
+
+<div class="grid-sidebar" style="margin-bottom: 1.25rem;">
+  <!-- Scheduled Events & Impact Comparison Chart -->
+  <div>
+    <div class="card" style="margin-bottom: 1.25rem;">
+      <div class="card-header">
+        <h2 class="card-title">Normal Baseline vs. Event-Day Crowd Comparison</h2>
+        <span id="ev-chart-label" class="data-badge badge-estimated">Select or Create an Event</span>
+      </div>
+      <canvas id="eventComparisonChart" height="135"></canvas>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Scheduled Campus &amp; Public Events</h2>
+        <span id="ev-count-badge" class="data-badge badge-real">0 Events</span>
+      </div>
+      <div class="table-responsive">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Event Name &amp; Category</th>
+              <th>Schedule</th>
+              <th>Participants &amp; Vehicles</th>
+              <th>Normal vs Event Surge</th>
+              <th>Gate Pressure</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="events-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add / Edit Event Form -->
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title" id="event-form-title">Add New Event</h2>
+      <button type="button" id="event-form-reset-btn" class="btn btn-secondary btn-sm" style="display: none;">
+        Cancel Edit
+      </button>
+    </div>
+    <form id="event-form">
+      <input type="hidden" id="ev-id" value="" />
+      <div class="form-group">
+        <label class="form-label" for="ev-name">Event Name</label>
+        <input type="text" id="ev-name" class="form-control" placeholder="e.g., National AI & Robotics Symposium" required />
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="ev-location">Event Venue / Location</label>
+        <input type="text" id="ev-location" class="form-control" placeholder="e.g., Main University Auditorium" required />
+      </div>
+
+      <div class="grid-2" style="gap: 0.65rem;">
+        <div class="form-group">
+          <label class="form-label" for="ev-category">Event Category</label>
+          <select id="ev-category" class="form-select">
+            <option value="College symposiums">College symposiums</option>
+            <option value="Technical festivals">Technical festivals</option>
+            <option value="Sports events">Sports events</option>
+            <option value="Public gatherings">Public gatherings</option>
+            <option value="College admissions">College admissions</option>
+            <option value="Seminars">Seminars</option>
+            <option value="Cultural events">Cultural events</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="ev-date">Event Date</label>
+          <input type="date" id="ev-date" class="form-control" required />
+        </div>
+      </div>
+
+      <div class="grid-2" style="gap: 0.65rem;">
+        <div class="form-group">
+          <label class="form-label" for="ev-start">Start Time</label>
+          <input type="time" id="ev-start" class="form-control" value="09:00" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="ev-end">End Time</label>
+          <input type="time" id="ev-end" class="form-control" value="17:00" required />
+        </div>
+      </div>
+
+      <div class="grid-3" style="gap: 0.55rem;">
+        <div class="form-group">
+          <label class="form-label" for="ev-participants">Expected Participants</label>
+          <input type="number" id="ev-participants" class="form-control" value="1200" min="10" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="ev-gates">Entry Gates</label>
+          <input type="number" id="ev-gates" class="form-control" value="3" min="1" max="20" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="ev-vehicles">Expected Vehicles</label>
+          <input type="number" id="ev-vehicles" class="form-control" value="320" min="0" required />
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="ev-notes">Operational Notes</label>
+        <input type="text" id="ev-notes" class="form-control" placeholder="Parking or gate instructions..." />
+      </div>
+
+      <button type="submit" id="ev-submit-btn" class="btn btn-primary" style="width: 100%;">
+        Save Event &amp; Predict Impact
+      </button>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let eventChart = null;
+let cachedEvents = [];
+
+function renderEventChart(ev) {
+  if (!ev || !ev.impact_analysis) return;
+  document.getElementById("ev-chart-label").textContent = `Impact Curve: ${ev.event_name}`;
+  const comp = ev.impact_analysis.hourly_comparison || [];
+  const ctx = document.getElementById("eventComparisonChart").getContext("2d");
+  if (eventChart) eventChart.destroy();
+  eventChart = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels: comp.map((c) => c.hour),
+      datasets: [
+        {
+          label: "Normal Day Baseline Crowd",
+          data: comp.map((c) => c.normal_day_crowd),
+          borderColor: "#10b981",
+          backgroundColor: "rgba(16, 185, 129, 0.1)",
+          borderDash: [5, 5],
+          fill: false,
+          tension: 0.3,
+        },
+        {
+          label: `Event-Day Predicted Crowd (${ev.event_category})`,
+          data: comp.map((c) => c.event_day_crowd),
+          borderColor: "#f97316",
+          backgroundColor: "rgba(249, 115, 22, 0.18)",
+          fill: true,
+          tension: 0.3,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { position: "top" } },
+    },
+  });
+}
+
+async function loadEvents() {
+  const resp = await fetch("/api/events");
+  const data = await resp.json();
+  if (data.status !== "ok") return;
+
+  cachedEvents = data.events || [];
+  document.getElementById("ev-count-badge").textContent = `${cachedEvents.length} Active Event(s)`;
+
+  const tbody = document.getElementById("events-tbody");
+  tbody.innerHTML = "";
+
+  cachedEvents.forEach((ev) => {
+    const imp = ev.impact_analysis || {};
+    const gateLoad = imp.per_gate_load || {};
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>
+        <strong>${ev.event_name}</strong><br>
+        <span class="data-badge badge-estimated">${ev.event_category}</span>
+        <div style="font-size:0.78rem; color:var(--text-muted); margin-top:0.2rem;">${ev.event_location}</div>
+      </td>
+      <td>
+        ${ev.event_date}<br>
+        <span style="color:var(--accent-cyan);">${ev.start_time} – ${ev.end_time}</span>
+      </td>
+      <td>
+        <strong>${ev.expected_participants.toLocaleString()}</strong> visitors<br>
+        <span style="color:var(--text-muted);">${ev.expected_vehicles} vehicles / ${ev.entry_gates_count} gates</span>
+      </td>
+      <td>
+        Normal: ${imp.normal_baseline_crowd} &rarr; Event: <strong>${imp.event_day_predicted_crowd}</strong><br>
+        <span class="traffic-pill traffic-${imp.event_congestion_color || 'Orange'}">+${imp.crowd_surge_percentage}% Surge (${imp.event_congestion_level})</span>
+      </td>
+      <td>
+        ~${gateLoad.participants_per_gate || 0} pers/gate<br>
+        <span style="font-size:0.76rem; color:var(--text-muted);">${gateLoad.gate_pressure_status || ""}</span>
+      </td>
+      <td>
+        <div style="display:flex; gap:0.35rem; flex-wrap:wrap;">
+          <button type="button" class="btn btn-secondary btn-sm btn-chart">Chart</button>
+          <button type="button" class="btn btn-secondary btn-sm btn-edit">Edit</button>
+          <button type="button" class="btn btn-danger btn-sm btn-del">Delete</button>
+        </div>
+      </td>
+    `;
+
+    tr.querySelector(".btn-chart").addEventListener("click", () => renderEventChart(ev));
+    tr.querySelector(".btn-edit").addEventListener("click", () => populateEditForm(ev));
+    tr.querySelector(".btn-del").addEventListener("click", async () => {
+      await fetch(`/api/events/${ev.id}`, { method: "DELETE" });
+      loadEvents();
+    });
+    tbody.appendChild(tr);
+  });
+
+  if (cachedEvents.length > 0) {
+    renderEventChart(cachedEvents[0]);
+  }
+}
+
+function populateEditForm(ev) {
+  document.getElementById("event-form-title").textContent = `Edit Event #${ev.id}`;
+  document.getElementById("event-form-reset-btn").style.display = "inline-flex";
+  document.getElementById("ev-id").value = ev.id;
+  document.getElementById("ev-name").value = ev.event_name;
+  document.getElementById("ev-location").value = ev.event_location;
+  document.getElementById("ev-category").value = ev.event_category;
+  document.getElementById("ev-date").value = ev.event_date;
+  document.getElementById("ev-start").value = ev.start_time;
+  document.getElementById("ev-end").value = ev.end_time;
+  document.getElementById("ev-participants").value = ev.expected_participants;
+  document.getElementById("ev-gates").value = ev.entry_gates_count;
+  document.getElementById("ev-vehicles").value = ev.expected_vehicles;
+  document.getElementById("ev-notes").value = ev.notes || "";
+}
+
+function resetEventForm() {
+  document.getElementById("event-form-title").textContent = "Add New Event";
+  document.getElementById("event-form-reset-btn").style.display = "none";
+  document.getElementById("ev-id").value = "";
+  document.getElementById("event-form").reset();
+  document.getElementById("ev-date").value = new Date().toISOString().split("T")[0];
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("ev-date").value = new Date().toISOString().split("T")[0];
+  loadEvents();
+
+  document.getElementById("event-form-reset-btn")?.addEventListener("click", resetEventForm);
+
+  document.getElementById("event-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const loc = CrowdCastState.getLocation();
+    const evId = document.getElementById("ev-id").value;
+    const payload = {
+      event_name: document.getElementById("ev-name").value,
+      event_location: document.getElementById("ev-location").value,
+      event_category: document.getElementById("ev-category").value,
+      event_date: document.getElementById("ev-date").value,
+      start_time: document.getElementById("ev-start").value,
+      end_time: document.getElementById("ev-end").value,
+      expected_participants: parseInt(document.getElementById("ev-participants").value, 10),
+      entry_gates_count: parseInt(document.getElementById("ev-gates").value, 10),
+      expected_vehicles: parseInt(document.getElementById("ev-vehicles").value, 10),
+      notes: document.getElementById("ev-notes").value,
+      latitude: loc.latitude,
+      longitude: loc.longitude,
+    };
+
+    const url = evId ? `/api/events/${evId}` : "/api/events";
+    const method = evId ? "PUT" : "POST";
+    const resp = await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (resp.ok) {
+      resetEventForm();
+      loadEvents();
+    }
+  });
+});
+</script>
+{% endblock %}
+

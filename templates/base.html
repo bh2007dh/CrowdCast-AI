@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}CrowdCast AI — Location-Aware Crowd & Traffic Prediction System{% endblock %}</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <!-- System Data Provenance & Provider Status Bar -->
+  <div class="system-status-bar" role="status" aria-label="System Data Provenance Status">
+    <div class="status-pills">
+      {% if provider_status.api_key_configured %}
+        <span class="data-badge badge-real" title="TomTom Traffic API Key Configured">
+          &#9679; Traffic Provider: Live TomTom API
+        </span>
+      {% else %}
+        <span class="data-badge badge-demo" title="{{ provider_status.status_message }}">
+          &#9888; Traffic Mode: Demonstration Sample Data (TOMTOM_API_KEY Not Configured)
+        </span>
+      {% endif %}
+      <span class="data-badge badge-estimated" title="Scikit-Learn Random Forest trained on Synthetic Demonstration Dataset">
+        &#9670; ML Engine: Random Forest (Synthetic Training Dataset)
+      </span>
+      <span class="data-badge badge-real" title="OpenStreetMap Nominatim & Overpass Geospatial Service">
+        &#9679; Geospatial: OpenStreetMap / Overpass / OSRM
+      </span>
+    </div>
+    <div>
+      <span id="global-status-toast" style="color: var(--accent-cyan); font-weight: 600; display: none;"></span>
+    </div>
+  </div>
+
+  <!-- Main Navigation Bar -->
+  <nav class="navbar" aria-label="Main Navigation">
+    <a href="{{ url_for('home_page') }}" class="brand">
+      <span class="brand-icon">CC</span>
+      <span>CrowdCast AI</span>
+    </a>
+
+    <ul class="nav-links">
+      <li><a href="{{ url_for('home_page') }}" class="{% if active_page == 'home' %}active{% endif %}">Home</a></li>
+      <li><a href="{{ url_for('dashboard_page') }}" class="{% if active_page == 'dashboard' %}active{% endif %}">Live Location</a></li>
+      <li><a href="{{ url_for('traffic_page') }}" class="{% if active_page == 'traffic' %}active{% endif %}">Traffic Map</a></li>
+      <li><a href="{{ url_for('prediction_page') }}" class="{% if active_page == 'prediction' %}active{% endif %}">Crowd Prediction</a></li>
+      <li><a href="{{ url_for('events_page') }}" class="{% if active_page == 'events' %}active{% endif %}">Events</a></li>
+      <li><a href="{{ url_for('congestion_page') }}" class="{% if active_page == 'congestion' %}active{% endif %}">Congestion Fusion &amp; Routes</a></li>
+      <li><a href="{{ url_for('reports_page') }}" class="{% if active_page == 'reports' %}active{% endif %}">Reports</a></li>
+      <li><a href="{{ url_for('admin_page') }}" class="{% if active_page == 'admin' %}active{% endif %}">Admin</a></li>
+    </ul>
+
+    <div class="nav-actions">
+      <button type="button" id="theme-toggle-btn" class="btn btn-secondary btn-sm" aria-label="Toggle Dark or Light Theme">
+        Light Theme
+      </button>
+    </div>
+  </nav>
+
+  <!-- Active Location & Search Radius Context Bar -->
+  <div class="location-context-bar" aria-label="Active Geographical Context">
+    <div class="location-bar-left">
+      <strong>Active Zone:</strong>
+      <span id="global-location-label">Guindy Institutional Area (Chennai)</span>
+      <code id="global-location-coords" style="color: var(--accent-cyan);">13.0108, 80.2354</code>
+      <span id="global-location-mode-badge" class="data-badge badge-demo">REFERENCE CAMPUS PRESET</span>
+    </div>
+    <div class="location-bar-controls">
+      <label for="global-radius-select" style="font-size: 0.8rem; color: var(--text-secondary);">Search Radius:</label>
+      <select id="global-radius-select" class="form-select" style="width: auto; padding: 0.3rem 0.6rem; font-size: 0.8rem;">
+        <option value="500">500 metres</option>
+        <option value="1000" selected>1 kilometre</option>
+        <option value="2000">2 kilometres</option>
+        <option value="5000">5 kilometres</option>
+        <option value="10000">10 kilometres</option>
+      </select>
+      <button type="button" id="global-detect-gps-btn" class="btn btn-primary btn-sm">
+        Refresh GPS
+      </button>
+      <a href="{{ url_for('dashboard_page') }}#manual-search-panel" class="btn btn-secondary btn-sm">
+        Manual Search
+      </a>
+    </div>
+  </div>
+
+  <!-- Page Body -->
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="footer">
+    <div>
+      <strong>CrowdCast AI</strong> &mdash; Location-Aware Intelligent Crowd &amp; Traffic Prediction System.
+      Real, Estimated (ML), and Demonstration data sources are explicitly separated across all views.
+    </div>
+    <div>
+      Advisory Decision Support Only &bull; Does not override official traffic controls or direct emergency vehicles.
+    </div>
+  </footer>
+
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>
+

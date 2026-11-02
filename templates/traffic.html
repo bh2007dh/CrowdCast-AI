@@ -1,0 +1,267 @@
+{% extends "base.html" %}
+{% block title %}Live Traffic Map — CrowdCast AI{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Live Traffic Flow, Road Congestion &amp; Incidents Map</h1>
+    <p class="page-subtitle">
+      Inspect road congestion classifications (Green, Yellow, Orange, Red), current vs. free-flow speeds, delays, and nearby incidents.
+    </p>
+  </div>
+  <div style="display: flex; gap: 0.6rem;">
+    <button type="button" id="traffic-refresh-btn" class="btn btn-primary">
+      Refresh Traffic Feed
+    </button>
+  </div>
+</div>
+
+<!-- Provider Availability & Mode Banner -->
+<div id="traffic-mode-banner" class="notice-banner notice-warning">
+  <div>
+    <strong id="traffic-provider-title">Checking Traffic Provider Status...</strong>
+    <div id="traffic-provider-desc" style="font-size: 0.8rem; color: var(--text-secondary);"></div>
+  </div>
+  <span id="traffic-source-badge" class="data-badge badge-demo">Checking...</span>
+</div>
+
+<!-- Top Traffic KPIs -->
+<div class="grid-4" style="margin-bottom: 1.25rem;">
+  <div class="kpi-card">
+    <span class="kpi-label">Overall Corridor Condition</span>
+    <div class="kpi-value" id="tf-congestion-level">--</div>
+    <div class="kpi-meta" id="tf-congestion-desc">Waiting for observation...</div>
+  </div>
+  <div class="kpi-card">
+    <span class="kpi-label">Current vs Free-Flow Speed</span>
+    <div class="kpi-value" id="tf-speeds">-- / -- km/h</div>
+    <div class="kpi-meta" id="tf-ratio">Congestion Index: --%</div>
+  </div>
+  <div class="kpi-card">
+    <span class="kpi-label">Average Corridor Delay</span>
+    <div class="kpi-value" id="tf-delay">-- sec</div>
+    <div class="kpi-meta">Per 1.8 km reference segment</div>
+  </div>
+  <div class="kpi-card">
+    <span class="kpi-label">Last Updated &amp; Active Incidents</span>
+    <div class="kpi-value" id="tf-incidents-count" style="font-size: 1.35rem;">0 Incidents</div>
+    <div class="kpi-meta" id="tf-updated-time">--</div>
+  </div>
+</div>
+
+<!-- Interactive Leaflet Traffic Map + Incidents Sidebar -->
+<div class="grid-sidebar" style="margin-bottom: 1.25rem;">
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Interactive Traffic &amp; POI Overlay Map</h2>
+      <span id="tf-map-badge" class="data-badge badge-demo">Traffic Overlay</span>
+    </div>
+    <div id="traffic-map" class="map-container"></div>
+    <div class="map-legend">
+      <strong>Road Congestion Legend:</strong>
+      <span class="legend-item"><span class="legend-dot" style="background: #10b981;"></span> Green: Low Congestion</span>
+      <span class="legend-item"><span class="legend-dot" style="background: #f59e0b;"></span> Yellow: Moderate Congestion</span>
+      <span class="legend-item"><span class="legend-dot" style="background: #f97316;"></span> Orange: Heavy Congestion</span>
+      <span class="legend-item"><span class="legend-dot" style="background: #ef4444;"></span> Red: Severe Congestion</span>
+      <span class="legend-item"><span class="legend-dot" style="background: #3b82f6;"></span> User Location</span>
+      <span class="legend-item"><span class="legend-dot" style="background: #a855f7;"></span> Important Places</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Reported Traffic Incidents</h2>
+      <span id="tf-inc-badge" class="data-badge badge-demo">Incidents</span>
+    </div>
+    <div id="tf-incidents-list" style="display: flex; flex-direction: column; gap: 0.75rem;"></div>
+  </div>
+</div>
+
+<!-- Detailed Road Segment Traffic Table -->
+<div class="card">
+  <div class="card-header">
+    <h2 class="card-title">Nearby Road Segments — Speed, Delay &amp; Congestion Classification</h2>
+    <span style="font-size: 0.8rem; color: var(--text-muted);">
+      Shows provider monitoring coverage and exact data provenance per segment
+    </span>
+  </div>
+  <div class="table-responsive">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Road Segment Name</th>
+          <th>Road Class</th>
+          <th>Provider Monitored</th>
+          <th>Current Speed</th>
+          <th>Free-Flow Speed</th>
+          <th>Delay</th>
+          <th>Congestion Level</th>
+          <th>Data Source</th>
+        </tr>
+      </thead>
+      <tbody id="tf-segments-tbody"></tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let trafficMap = null;
+let trafficLayer = null;
+
+function initTrafficMap(loc) {
+  if (!trafficMap) {
+    trafficMap = L.map("traffic-map").setView([loc.latitude, loc.longitude], 14);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: "&copy; OpenStreetMap contributors",
+    }).addTo(trafficMap);
+    trafficLayer = L.layerGroup().addTo(trafficMap);
+  } else {
+    trafficMap.setView([loc.latitude, loc.longitude], 14);
+  }
+}
+
+async function loadTrafficView() {
+  const loc = CrowdCastState.getLocation();
+  initTrafficMap(loc);
+  trafficLayer.clearLayers();
+
+  // User location marker
+  L.circleMarker([loc.latitude, loc.longitude], {
+    radius: 9,
+    fillColor: "#3b82f6",
+    color: "#fff",
+    weight: 2.5,
+    fillOpacity: 1,
+  })
+    .bindPopup(`<strong>User Location</strong><br>${loc.formatted_address || ""}`)
+    .addTo(trafficLayer);
+
+  const [tfResp, incResp, nearResp] = await Promise.all([
+    fetch(`/api/traffic/current?lat=${loc.latitude}&lon=${loc.longitude}&radius_m=${loc.radius_m || 1000}`),
+    fetch(`/api/traffic/incidents?lat=${loc.latitude}&lon=${loc.longitude}&radius_m=${loc.radius_m || 1000}`),
+    fetch(`/api/location/nearby?lat=${loc.latitude}&lon=${loc.longitude}&radius_m=${loc.radius_m || 1000}`),
+  ]);
+
+  const tfJson = await tfResp.json();
+  const incJson = await incResp.json();
+  const nearJson = await nearResp.json();
+
+  if (tfJson.status === "ok" && tfJson.traffic) {
+    const tf = tfJson.traffic;
+    const sum = tf.summary;
+
+    const banner = document.getElementById("traffic-mode-banner");
+    const badge = document.getElementById("traffic-source-badge");
+    document.getElementById("traffic-provider-title").textContent = `${tf.provider_name} — ${tf.provider_status}`;
+    document.getElementById("traffic-provider-desc").textContent = tf.data_label;
+
+    if (tf.is_simulated) {
+      banner.className = "notice-banner notice-warning";
+      badge.className = "data-badge badge-demo";
+      badge.textContent = "DEMONSTRATION SAMPLE DATA";
+    } else {
+      banner.className = "notice-banner notice-info";
+      badge.className = "data-badge badge-real";
+      badge.textContent = "LIVE REAL-TIME TRAFFIC";
+    }
+
+    document.getElementById("tf-congestion-level").innerHTML = `<span class="traffic-pill traffic-${sum.color_code}">${sum.color_code}: ${sum.congestion_level}</span>`;
+    document.getElementById("tf-congestion-desc").textContent = sum.description;
+    document.getElementById("tf-speeds").textContent = `${sum.current_speed_kmh} / ${sum.free_flow_speed_kmh} km/h`;
+    document.getElementById("tf-ratio").textContent = `Congestion Index: ${Math.round(sum.congestion_ratio * 100)}%`;
+    document.getElementById("tf-delay").textContent = `+${sum.average_delay_seconds} sec`;
+    document.getElementById("tf-updated-time").textContent = `Updated: ${new Date(tf.last_updated).toLocaleTimeString()}`;
+
+    const tbody = document.getElementById("tf-segments-tbody");
+    tbody.innerHTML = "";
+
+    (tf.segments || []).forEach((seg) => {
+      if (seg.coordinates && seg.coordinates.length >= 2) {
+        L.polyline(seg.coordinates, {
+          color: seg.hex_color || "#f59e0b",
+          weight: 6,
+          opacity: 0.9,
+        })
+          .bindPopup(
+            `<strong>${seg.road_name}</strong><br>` +
+              `Congestion: <b>${seg.color_code} (${seg.congestion_level})</b><br>` +
+              `Speed: ${seg.current_speed_kmh} / ${seg.free_flow_speed_kmh} km/h (Delay: +${seg.delay_seconds}s)<br>` +
+              `Source: <code>${seg.data_source}</code>`
+          )
+          .addTo(trafficLayer);
+      }
+
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td><strong>${seg.road_name}</strong></td>
+        <td>${seg.road_type}</td>
+        <td>${seg.provider_monitored ? "Yes (Primary)" : "No (Capacity Est.)"}</td>
+        <td><strong>${seg.current_speed_kmh} km/h</strong></td>
+        <td>${seg.free_flow_speed_kmh} km/h</td>
+        <td>+${seg.delay_seconds} s</td>
+        <td><span class="traffic-pill traffic-${seg.color_code}">${seg.color_code}: ${seg.congestion_level}</span></td>
+        <td><code>${seg.data_source}</code></td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  if (incJson.status === "ok" && incJson.incidents_data) {
+    const incData = incJson.incidents_data;
+    const listEl = document.getElementById("tf-incidents-list");
+    listEl.innerHTML = "";
+    const incs = incData.incidents || [];
+    document.getElementById("tf-incidents-count").textContent = `${incs.length} Incident(s)`;
+
+    incs.forEach((inc) => {
+      L.circleMarker([inc.latitude, inc.longitude], {
+        radius: 8,
+        fillColor: "#ef4444",
+        color: "#ffffff",
+        weight: 2,
+        fillOpacity: 0.95,
+      })
+        .bindPopup(`<strong>${inc.title}</strong><br>From: ${inc.road_from} &rarr; ${inc.road_to}<br>Delay: +${inc.delay_seconds}s`)
+        .addTo(trafficLayer);
+
+      const item = document.createElement("div");
+      item.style.cssText = "padding: 0.75rem; border-radius: 8px; background: var(--bg-surface); border: 1px solid var(--border-color); font-size: 0.83rem;";
+      item.innerHTML = `
+        <div style="display:flex; justify-content:space-between; margin-bottom:0.3rem;">
+          <span class="traffic-pill traffic-Orange">${inc.severity}</span>
+          <span style="color:var(--text-muted);">Delay: +${inc.delay_seconds}s</span>
+        </div>
+        <strong>${inc.title}</strong>
+        <div style="color:var(--text-secondary); margin-top:0.25rem;">${inc.road_from} &rarr; ${inc.road_to}</div>
+      `;
+      listEl.appendChild(item);
+    });
+  }
+
+  // Render nearby important places on traffic map
+  if (nearJson.status === "ok" && nearJson.surrounding) {
+    (nearJson.surrounding.places || []).slice(0, 20).forEach((p) => {
+      L.circleMarker([p.latitude, p.longitude], {
+        radius: 5,
+        fillColor: "#a855f7",
+        color: "#fff",
+        weight: 1,
+        fillOpacity: 0.85,
+      })
+        .bindPopup(`<strong>${p.name}</strong><br>${p.category} (${p.distance_m}m)`)
+        .addTo(trafficLayer);
+    });
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  loadTrafficView();
+  window.addEventListener("crowdcast:locationChanged", loadTrafficView);
+  document.getElementById("traffic-refresh-btn")?.addEventListener("click", loadTrafficView);
+});
+</script>
+{% endblock %}
+
